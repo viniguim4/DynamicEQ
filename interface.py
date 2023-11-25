@@ -4,19 +4,47 @@ import serial
 import time
 from serial.tools import list_ports
 import threading  
-
+import scipy as sp
+from numpy import round
 #Variaveris globais
 startMarker = '<'
 endMarker = '>'
-Separador_elemento = ','
+Separador_elemento = ';'
 Separador_filtro = ','
 dataStarted = False
 dataBuf = ""
 messageComplete = False
 slider_values = [0, 0, 0, 0, 0, 0, 0]
 count = 0
-N_taps = 2
+N_taps = 3
+
 #========================
+
+def  agrupar(lista, original):
+    global N_taps
+    for valor in lista[:N_taps//2+1]:
+        original.append(round(valor, 3))
+    return original
+def CalcularCoeficientes(slider_values):
+    global N_taps
+    coef = []
+    freq_passa_baixas = slider_values[1]
+    freq_passa_faixas = slider_values[3:5]
+    freq_passa_altas = slider_values[6]
+
+    coef.append(slider_values[0])
+    LP = sp.signal.firwin(N_taps, freq_passa_baixas, pass_zero="lowpass", fs =650)
+    coef = agrupar(LP, coef)
+
+    coef.append(slider_values[2])
+    BP = sp.signal.firwin(N_taps, freq_passa_faixas, pass_zero="bandpass", fs =8000)
+    coef = agrupar(BP, coef)
+
+    coef.append(slider_values[5])
+    HP = sp.signal.firwin(N_taps, freq_passa_altas, pass_zero="highpass", fs =40050)
+    coef = agrupar(HP, coef)
+    return coef
+
 def get_serial_ports():
     ports = list_ports.comports()
     port_names = [port.device for port in ports]
@@ -47,7 +75,7 @@ def SendData(stringToSend):
     stringWithMarkers = (startMarker)
     stringWithMarkers += stringToSend
     stringWithMarkers += (endMarker)
-
+    
     serialPort.write(stringWithMarkers.encode('utf-8')) # encode needed for Python3
 
 
@@ -94,12 +122,16 @@ def waitForArduino():
 
 
 def FormataDados(slider_values):
+    global N_taps, Separador_elemento, Separador_filtro
     envio = ""
-    for i in range(0, len(slider_values)):
-        envio += str(slider_values[i])
-        if(i != len(slider_values)-1):
-            envio += Separador_elemento 
-    return envio + "0;-0.06855765802834766;0.8628846839433046;,0"
+    atualizar = CalcularCoeficientes(slider_values)
+    for i in range(0, len(atualizar)):
+        if(i == N_taps//2+2 or i == (2*N_taps)//2+3):
+            envio += Separador_filtro
+        envio += str(atualizar[i])
+        if(i != len(atualizar)-1):
+            envio += Separador_elemento
+    return envio
 
 def Comunicar2():
     global count, slider_values
@@ -135,14 +167,14 @@ def Comunicar():
     
 #==================== Funções da Interface ====================
 def update_label(self):
-    time.sleep(0.1)
+    time.sleep(0.11)
     slider_values[0] = slider1.get()
     slider_values[1] = slider2.get()
     slider_values[2] = slider3.get()
     slider_values[3] = slider4.get()
-    slider_values[4] = slider5.get()
-    slider_values[5] = slider6.get()
-    slider_values[6] = slider7.get()
+    slider_values[4] = slider7.get()
+    slider_values[5] = slider5.get()
+    slider_values[6] = slider6.get()
 
     label.config(text=f"Valores: {slider_values[0]}, {slider_values[1]}, {slider_values[2]}, {slider_values[3]}, {slider_values[4]}, {slider_values[5]}, {slider_values[6]}")
 
@@ -166,13 +198,13 @@ root = tk.Tk()
 root.title("Coletar Parametros")
 
 # Create seven sliders with increased length
-slider1 = Scale(root, from_=20, to=320, orient="horizontal", label="Frequência de Corte", length=400)
-slider2 = Scale(root, from_=0, to=100, orient="horizontal", label="Ganho", length=400)
-slider3 = Scale(root, from_=320, to=720, orient="horizontal", label="Frequência de Corte Inferior", length=400)
-slider4 = Scale(root, from_=720, to=3200, orient="horizontal", label="Frequência de Corte Superior", length=400)
-slider7 = Scale(root, from_=0, to=100, orient="horizontal", label="Ganho", length=400)
-slider5 = Scale(root, from_=3200, to=20000, orient="horizontal", label="Frequência de Corte", length=400)
-slider6 = Scale(root, from_=0, to=100, orient="horizontal", label="Ganho", length=400)
+slider1 = Scale(root, from_=0, to=100, orient="horizontal", label="Ganho", length=400) 
+slider2 = Scale(root, from_=20, to=320, orient="horizontal", label="Frequência de Corte", length=400)
+slider3 = Scale(root, from_=0, to=100, orient="horizontal", label="Ganho", length=400) 
+slider4 = Scale(root, from_=320, to=720, orient="horizontal", label="Frequência de Corte Inferior", length=400) 
+slider7 = Scale(root, from_=720, to=3200, orient="horizontal", label="Frequência de Corte Superior", length=400)
+slider5 = Scale(root, from_=0, to=100, orient="horizontal", label="Ganho", length=400) 
+slider6 = Scale(root, from_=3200, to=20000, orient="horizontal", label="Frequência de Corte", length=400)
 
 # Create labels for slider pairs with increased font size
 label_pair1 = Label(root, text="Passa Baixas", font=("Arial", 18))
