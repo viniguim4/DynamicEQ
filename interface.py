@@ -16,14 +16,15 @@ dataBuf = ""
 messageComplete = False
 slider_values = [0, 0, 0, 0, 0, 0, 0]
 count = 0
-N_taps = 3
+N_taps = 5
+baudrate = 19200
 
 #========================
 
 def  agrupar(lista, original):
     global N_taps
     for valor in lista[:N_taps//2+1]:
-        original.append(round(valor, 3))
+        original.append(round(valor, 4))
     return original
 def CalcularCoeficientes(slider_values):
     global N_taps
@@ -63,7 +64,8 @@ def setupSerial(baudRate, serialPortName):
 
     print("Serial port " + serialPortName + " opened  Baudrate " + str(baudRate))
 
-    waitForArduino()
+    #waitForArduino()
+    wait()
 
 #========================
 
@@ -84,10 +86,8 @@ def SendData(stringToSend):
 def ReciveData():
 
     global startMarker, endMarker, serialPort, dataStarted, dataBuf, messageComplete
-
     if serialPort.inWaiting() > 0 and messageComplete == False:
         line = serialPort.readline().decode('utf-8').strip()
-
         for caracter in line:
             if dataStarted == True:
                 if caracter != endMarker:
@@ -120,6 +120,14 @@ def waitForArduino():
         if not (msg == 'XXX'): 
             print(msg)
 
+def wait():
+
+    # wait until the Arduino sends 'Arduino is ready' - allows time for Arduino reset
+    # it also ensures that any bytes left over from a previous message are discarded
+    
+    time.sleep(4)
+    print("SetUp Completo")
+
 
 def FormataDados(slider_values):
     global N_taps, Separador_elemento, Separador_filtro
@@ -135,24 +143,6 @@ def FormataDados(slider_values):
 
 def Comunicar2():
     global count, slider_values
-    prevTime = time.time()
-    while True:
-                # check for a reply
-        arduinoReply = ReciveData()
-        if not (arduinoReply == 'XXX'):
-            print("   Recebido: %s" % arduinoReply)
-            print()
-            
-            # send a message at intervals
-        if time.time() - prevTime > 1.0:
-            envio = FormataDados(slider_values)
-            SendData(envio)
-            print(str(count) + "  Enviado: " + str(envio) )
-            prevTime = time.time()
-            count += 1
-
-def Comunicar():
-    global count, slider_values
     envio = FormataDados(slider_values)
     SendData(envio)
     print(str(count) + "  Enviado: " + str(envio) )
@@ -164,10 +154,17 @@ def Comunicar():
     else:
         print("   Recebido: nada")        
 
+def Comunicar():
+    global count, slider_values
+    envio = FormataDados(slider_values)
+    SendData(envio)
+    print(str(count) + "  Enviado: " + str(envio) )
+    count += 1
+
     
 #==================== Funções da Interface ====================
 def update_label(self):
-    time.sleep(0.11)
+    time.sleep(0.1)
     slider_values[0] = slider1.get()
     slider_values[1] = slider2.get()
     slider_values[2] = slider3.get()
@@ -187,23 +184,23 @@ def update_label(self):
 def on_button_click():
     # Create a new thread for sending data
     Comunicar()
-    """try:
-        threading.Thread(target=Comunicar).start()
-    except Exception as e:
-        print(f"Error: {e}")"""
+
     
 #==================== Create the main window====================
-setupSerial(19200, select_serial_port())
+setupSerial(baudrate, select_serial_port())
 root = tk.Tk()
 root.title("Coletar Parametros")
 
 # Create seven sliders with increased length
 slider1 = Scale(root, from_=0, to=100, orient="horizontal", label="Ganho", length=400) 
+slider1.set(100)
 slider2 = Scale(root, from_=20, to=320, orient="horizontal", label="Frequência de Corte", length=400)
 slider3 = Scale(root, from_=0, to=100, orient="horizontal", label="Ganho", length=400) 
+slider3.set(100)
 slider4 = Scale(root, from_=320, to=720, orient="horizontal", label="Frequência de Corte Inferior", length=400) 
 slider7 = Scale(root, from_=720, to=3200, orient="horizontal", label="Frequência de Corte Superior", length=400)
 slider5 = Scale(root, from_=0, to=100, orient="horizontal", label="Ganho", length=400) 
+slider5.set(100)
 slider6 = Scale(root, from_=3200, to=20000, orient="horizontal", label="Frequência de Corte", length=400)
 
 # Create labels for slider pairs with increased font size
@@ -241,5 +238,6 @@ slider6.pack()
 label.pack()
 
 button.pack()
+
 # Start the main loop
 root.mainloop()
