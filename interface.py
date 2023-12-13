@@ -16,33 +16,32 @@ dataBuf = ""
 messageComplete = False
 slider_values = [0, 0, 0, 0, 0, 0, 0]
 count = 0
-N_taps = 5
-baudrate = 19200
+N_taps = 21
 
 #========================
 
 def  agrupar(lista, original):
     global N_taps
     for valor in lista[:N_taps//2+1]:
-        original.append(round(valor, 4))
+        original.append(round(valor, 5))
     return original
 def CalcularCoeficientes(slider_values):
     global N_taps
     coef = []
-    freq_passa_baixas = slider_values[1]
-    freq_passa_faixas = slider_values[3:5]
-    freq_passa_altas = slider_values[6]
+    freq_passa_baixas = slider_values[1] * 2/6000
+    freq_passa_faixas = [slider_values[3]* 2/8000, slider_values[4]* 2/8000  ]  
+    freq_passa_altas = slider_values[6] * 2/40050
 
     coef.append(slider_values[0])
-    LP = sp.signal.firwin(N_taps, freq_passa_baixas, pass_zero="lowpass", fs =650)
+    LP = sp.signal.firwin(N_taps, freq_passa_baixas, pass_zero="lowpass", window = "hamming")
     coef = agrupar(LP, coef)
 
     coef.append(slider_values[2])
-    BP = sp.signal.firwin(N_taps, freq_passa_faixas, pass_zero="bandpass", fs =8000)
+    BP = sp.signal.firwin(N_taps, freq_passa_faixas, pass_zero="bandpass", window = "hamming")
     coef = agrupar(BP, coef)
 
     coef.append(slider_values[5])
-    HP = sp.signal.firwin(N_taps, freq_passa_altas, pass_zero="highpass", fs =40050)
+    HP = sp.signal.firwin(N_taps, freq_passa_altas, pass_zero="highpass", window = "hamming")
     coef = agrupar(HP, coef)
     return coef
 
@@ -65,7 +64,6 @@ def setupSerial(baudRate, serialPortName):
     print("Serial port " + serialPortName + " opened  Baudrate " + str(baudRate))
 
     #waitForArduino()
-    wait()
 
 #========================
 
@@ -77,7 +75,8 @@ def SendData(stringToSend):
     stringWithMarkers = (startMarker)
     stringWithMarkers += stringToSend
     stringWithMarkers += (endMarker)
-    
+    stringWithMarkers += "ç"
+    #print(stringWithMarkers)
     serialPort.write(stringWithMarkers.encode('utf-8')) # encode needed for Python3
 
 
@@ -86,8 +85,10 @@ def SendData(stringToSend):
 def ReciveData():
 
     global startMarker, endMarker, serialPort, dataStarted, dataBuf, messageComplete
+
     if serialPort.inWaiting() > 0 and messageComplete == False:
         line = serialPort.readline().decode('utf-8').strip()
+
         for caracter in line:
             if dataStarted == True:
                 if caracter != endMarker:
@@ -120,14 +121,6 @@ def waitForArduino():
         if not (msg == 'XXX'): 
             print(msg)
 
-def wait():
-
-    # wait until the Arduino sends 'Arduino is ready' - allows time for Arduino reset
-    # it also ensures that any bytes left over from a previous message are discarded
-    
-    time.sleep(4)
-    print("SetUp Completo")
-
 
 def FormataDados(slider_values):
     global N_taps, Separador_elemento, Separador_filtro
@@ -143,16 +136,21 @@ def FormataDados(slider_values):
 
 def Comunicar2():
     global count, slider_values
-    envio = FormataDados(slider_values)
-    SendData(envio)
-    print(str(count) + "  Enviado: " + str(envio) )
-    count += 1
-    arduinoReply = ReciveData()
-    if not (arduinoReply == 'XXX'):
-        print("   Recebido: %s" % arduinoReply)
-        print()
-    else:
-        print("   Recebido: nada")        
+    prevTime = time.time()
+    while True:
+                # check for a reply
+        arduinoReply = ReciveData()
+        if not (arduinoReply == 'XXX'):
+            print("   Recebido: %s" % arduinoReply)
+            print()
+            
+            # send a message at intervals
+        if time.time() - prevTime > 1.0:
+            envio = FormataDados(slider_values)
+            SendData(envio)
+            print(str(count) + "  Enviado: " + str(envio) )
+            prevTime = time.time()
+            count += 1
 
 def Comunicar():
     global count, slider_values
@@ -160,11 +158,15 @@ def Comunicar():
     SendData(envio)
     print(str(count) + "  Enviado: " + str(envio) )
     count += 1
+    arduinoReply = ReciveData()
+    if not (arduinoReply == 'XXX'):
+        print("   Recebido: %s" % arduinoReply)
+        print()      
 
     
 #==================== Funções da Interface ====================
 def update_label(self):
-    time.sleep(0.1)
+    time.sleep(0.11)
     slider_values[0] = slider1.get()
     slider_values[1] = slider2.get()
     slider_values[2] = slider3.get()
@@ -184,10 +186,9 @@ def update_label(self):
 def on_button_click():
     # Create a new thread for sending data
     Comunicar()
-
     
 #==================== Create the main window====================
-setupSerial(baudrate, select_serial_port())
+setupSerial(19200, select_serial_port())
 root = tk.Tk()
 root.title("Coletar Parametros")
 
@@ -198,7 +199,8 @@ slider2 = Scale(root, from_=20, to=320, orient="horizontal", label="Frequência 
 slider3 = Scale(root, from_=0, to=100, orient="horizontal", label="Ganho", length=400) 
 slider3.set(100)
 slider4 = Scale(root, from_=320, to=720, orient="horizontal", label="Frequência de Corte Inferior", length=400) 
-slider7 = Scale(root, from_=720, to=3200, orient="horizontal", label="Frequência de Corte Superior", length=400)
+slider7 = Scale(root, from_=721, to=3200, orient="horizontal", label="Frequência de Corte Superior", length=400)
+slider7.set(3200)
 slider5 = Scale(root, from_=0, to=100, orient="horizontal", label="Ganho", length=400) 
 slider5.set(100)
 slider6 = Scale(root, from_=3200, to=20000, orient="horizontal", label="Frequência de Corte", length=400)
@@ -238,6 +240,5 @@ slider6.pack()
 label.pack()
 
 button.pack()
-
 # Start the main loop
 root.mainloop()
